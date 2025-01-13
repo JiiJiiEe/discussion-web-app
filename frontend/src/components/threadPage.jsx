@@ -1,96 +1,82 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
+import forumApi from '../forumApi';
+import Post from './post';
+import { getCurrentUser } from '../auth/auth';
 
-function ThreadPage() {
-  const { threadId } = useParams();
-  const [thread, setThread] = useState(null);
-  const [newPost, setNewPost] = useState('');
+const ThreadPage = () => {
+  const { id } = useParams();
+  const [thread, setThread] = useState({});
   const [posts, setPosts] = useState([]);
+  const [newPost, setNewPost] = useState('');
+  const currentUser = getCurrentUser();
+  const [threadCreator, setThreadCreator] = useState({});
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Fetch thread data (including posts)
-    axios.get(`http://localhost:8000/api/threads/${threadId}/`)
+    forumApi.get(`/threads/${id}/`)
       .then(response => {
         setThread(response.data);
-        setPosts(response.data.posts);  // Set posts of the thread
+        setThreadCreator(response.data.user);
+        //console.log(currentUser)
+        console.log(thread);
+        setPosts(response.data.posts);
       })
-      .catch(error => {
-        console.error("There was an error fetching the thread!", error);
-      });
-  }, [threadId]);
+      .catch(err => console.error(err));
+  }, [id]);
 
-  const handlePostSubmit = (e) => {
+  const handleSubmitPost = (e) => {
     e.preventDefault();
-    if (newPost.trim()) {
-      axios.post(`http://localhost:8000/api/threads/${threadId}/posts/`, { content: newPost, thread: `${threadId}`})
-        .then(response => {
-          setPosts([...posts, response.data]);  // Append new post
-          setNewPost('');  // Clear the input
-        })
-        .catch(error => {
-          console.error("There was an error creating the post!", error);
-        });
-    }
+    forumApi.post(`/threads/${id}/posts/`, { content: newPost, thread: id })
+      .then((response) => {
+        setPosts([...posts, response.data]);
+        setNewPost('');
+      })
+      .catch(err => console.error(err));
   };
 
-  const handleDeletePost = (postId) => {
-    if (window.confirm('Are you sure you want to delete this post?')) {
-      axios.delete(`http://localhost:8000/api/posts/${postId}/`)
-        .then(() => {
-          setPosts(posts.filter(post => post.id !== postId)); // Remove deleted post from UI
-        })
-        .catch(error => {
-          console.error("There was an error deleting the post!", error);
-        });
-    }
+  const deleteThread = (threadId) => {
+    forumApi.delete(`/threads/${threadId}/`)
+      .then(() => {
+        navigate('/');
+      })
+      .catch(err => console.error(err));
   };
-
-  const handleDeleteThread = () => {
-    if (window.confirm('Are you sure you want to delete this thread?')) {
-      axios.delete(`http://localhost:8000/api/threads/${threadId}/`)
-        .then(() => {
-          navigate('/'); // Redirect to the threads list after deleting
-        })
-        .catch(error => {
-          console.error("There was an error deleting the thread!", error);
-        });
-    }
-  };
-
-  const renderPosts = () => {
-    if (posts.length === 0) {
-      return <p>No posts yet. Be the first to reply!</p>;
-    }
-    return posts.map((post) => (
-      <div key={post.id} className="post">
-        <p>{post.content}</p>
-        <p><small>Posted on: {new Date(post.created_at).toLocaleString()}</small></p>
-        <button onClick={() => handleDeletePost(post.id)} className="delete-button">Delete Post</button>
-      </div>
-    ));
-  };
-
+  
   return (
-    <div className="thread-page">
-      {thread && <h2>{thread.title}</h2>}
-
-      <section className="posts-section">
-        {renderPosts()}
-      </section>
-
-      <form onSubmit={handlePostSubmit} className="post-form">
-        <textarea
-          value={newPost}
-          onChange={(e) => setNewPost(e.target.value)}
-          placeholder="What's your reply?"
-          rows="3"
-        />
-        <button type="submit">Reply</button>
+    <div className="section is-large">
+        <div className='box'>
+        <h3>{thread.title}</h3>
+        <span>Posted by: {threadCreator.username}</span>
+        <p>{new Date(thread.created_at).toLocaleString()}</p>
+        {(currentUser !== null && (currentUser.user_id === threadCreator.id || currentUser.is_staff)) && (
+          <button onClick={() => deleteThread(thread.id)}>Delete thread</button>
+        )}
+        </div>
+        
+      <div>
+        {posts.map((post) => (
+          <Post key={post.id} post={post} />
+        ))}
+      </div>
+      <div className="section is-small">
+      {(currentUser !== null ) && (
+      <form onSubmit={handleSubmitPost}>
+        <textarea className='input is-large'
+          value={newPost} 
+          onChange={(e) => setNewPost(e.target.value)} 
+          placeholder="Write a new post..."
+          required
+        ></textarea>
+        <button type="submit">Submit Post</button>
       </form>
+      )}
+      {(currentUser == null ) && (
+        <p>Login or register to send messages.</p>
+      )}
+    </div>
     </div>
   );
-}
+};
 
 export default ThreadPage;
